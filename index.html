@@ -35,35 +35,35 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 #recordControls button:disabled{background:#444;color:#888;cursor:not-allowed}
 #recordPlayback{display:none}
 
-#shadowingPause{background:rgba(0,0,0,.95);z-index:9998}
-#pauseControls{position:absolute;top:20px;right:20px;display:flex;gap:10px}
-#pauseCloseButton,#pauseStopButton{width:120px;padding:5px 10px;border-radius:5px;font-size:14px}
+/* SHADOWING PAUSE STYLES */
+#shadowingPause{background:rgba(0,0,0,.98);z-index:9998}
+#pauseControls{position:absolute;top:10px;right:10px;display:flex;gap:10px}
+#pauseCloseButton,#pauseStopButton{width:110px;padding:5px;border-radius:5px;font-size:12px}
 #pauseCloseButton{background:var(--gold);color:black}
 #pauseStopButton{background:#ff0000;color:white}
 
-/* Desktop Font Size */
-#shadowingHeader{position:absolute;top:15%;width:100%;text-align:center;color:var(--gold);font-size:50px;line-height:1;font-weight:700}
+/* Połączony nagłówek i licznik */
+#shadowingHeader{position:absolute;top:12%;width:100%;text-align:center;color:var(--gold);font-size:40px;font-weight:700}
+#pauseTimer{color:white;margin-left:20px} /* Licznik obok napisu */
 
 #pauseLine{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;text-align:center;display:flex;flex-wrap:wrap;justify-content:center}
-#pauseLine .completed{font-size:60px;color:white!important;margin-right:20px;margin-bottom:10px;display:inline-block}
-#pauseTimer{position:absolute;bottom:15%;width:100%;text-align:center;font-size:100px;color:var(--gold)}
+#pauseLine .completed{font-size:50px;color:white!important;margin-right:15px;margin-bottom:10px;display:inline-block}
 
 /* RESPONSIVE FIXES */
 @media(max-width:480px){
-  #fullscreenModal .karaoke-line{font-size:34px}
-  #modalPlayButton,#modalPrevButton,#modalNextButton{width:65px;height:65px;font-size:30px}
-  #pauseLine .completed{font-size:36px}
-  #pauseTimer{font-size:60px;bottom:10%}
-  #playAllButton,#playESButton,#playENButton,#resetAllButton,#stopAllButton{width:45%;font-size:14px}
+  #fullscreenModal .karaoke-line{font-size:30px}
+  #modalPlayButton,#modalPrevButton,#modalNextButton{width:60px;height:60px;font-size:24px}
   #recordControls button{width:100%}
-  #shadowingHeader{font-size:30px; top:10%}
+  #shadowingHeader{font-size:30px; top:15%}
 }
 
-/* MOBILE LANDSCAPE SPECIFIC: Font size reduced by 60% (from 50px to 20px) */
+/* MOBILE LANDSCAPE SPECIFIC FIX */
 @media(max-width:930px) and (orientation: landscape) {
-  #shadowingHeader { font-size: 20px; top: 5%; }
-  #pauseLine .completed { font-size: 28px; }
-  #pauseTimer { font-size: 40px; bottom: 5%; }
+  #shadowingHeader { font-size: 24px; top: 5%; display: flex; justify-content: center; align-items: center; }
+  #pauseTimer { font-size: 24px; margin-left: 10px; }
+  #pauseLine { top: 55%; }
+  #pauseLine .completed { font-size: 22px; margin-bottom: 5px; }
+  #pauseControls { top: 5px; right: 5px; }
 }
 </style>
 </head>
@@ -80,12 +80,11 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 
 <div id="shadowingPause" aria-hidden="true">
   <div id="pauseControls">
-    <button id="pauseStopButton">🛑 STOP SEQUENCE</button>
+    <button id="pauseStopButton">🛑 STOP</button>
     <button id="pauseCloseButton">✖ NEXT</button>
   </div>
-  <div id="shadowingHeader">SHA!DOWING PAUSE</div>
+  <div id="shadowingHeader">SHA! <span id="pauseTimer"></span></div>
   <div id="pauseLine"></div>
-  <div id="pauseTimer"></div>
 </div>
 
 <div id="fullscreenModal" aria-hidden="true">
@@ -183,7 +182,6 @@ async function loadKaraoke(audioFile,jsonFile,container,type){
     const res = await fetch(jsonFile);
     if(!res.ok) return;
     const data = await res.json();
-    if(!data || !data.length) return;
     const playerDiv=document.createElement('div'); playerDiv.className='player';
     const controlsDiv=document.createElement('div'); controlsDiv.className='audio-container';
     const playBtn=document.createElement('button'); playBtn.textContent='▶';
@@ -279,11 +277,10 @@ startBtn.onclick = async () => {
         playBtn.disabled = false;
     };
     mediaRecorder.start();
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    startBtn.innerText = "GRABANDO... / RECORDING...";
+    startBtn.disabled = true; stopBtn.disabled = false;
+    startBtn.innerText = "GRABANDO...";
 };
-stopBtn.onclick = () => { mediaRecorder.stop(); startBtn.disabled = false; stopBtn.disabled = true; startBtn.innerText = "RE-GRABAR / RE-RECORD"; };
+stopBtn.onclick = () => { mediaRecorder.stop(); startBtn.disabled = false; stopBtn.disabled = true; startBtn.innerText = "RE-GRABAR"; };
 playBtn.onclick = () => playback.play();
 
 document.getElementById('playAllButton').onclick = ()=> startFilteredPlay(order, document.getElementById('playAllButton'));
@@ -296,7 +293,7 @@ function stopSequenceGlobally(){
   document.getElementById('playAllButton').textContent='▶ PLAY ALL';
   document.getElementById('playESButton').textContent='🇪🇸 PLAY SPANISH';
   document.getElementById('playENButton').textContent='🇺🇸 PLAY ENGLISH';
-  el.stopAllButton.textContent='▶ RESUME'; el.stopAllButton.style.background='var(--gold)'; el.stopAllButton.style.color='black'; el.stopAllButton.hidden=false;
+  el.stopAllButton.textContent='▶ RESUME'; el.stopAllButton.style.background='var(--gold)'; el.stopAllButton.hidden=false;
 }
 
 function startFilteredPlay(list, buttonElement){
