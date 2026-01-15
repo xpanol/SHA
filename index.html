@@ -19,7 +19,8 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 .karaoke-line{font-size:32px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:flex-start;padding-top:10px;text-align:left}
 .word{transition:color .08s}
 .completed{color:var(--brown)}
-/* modal & pause simplified */
+
+/* MODAL & RECORDING */
 #fullscreenModal,#shadowingPause{display:none;position:fixed;left:0;top:0;width:100%;height:100%;justify-content:center;align-items:center;flex-direction:column;z-index:9998}
 #fullscreenModal{background:black;padding:20px;overflow:auto;z-index:9999}
 #fullscreenModal .karaoke-line{font-size:48px;gap:24px;max-width:90%;margin:0 auto 30px;white-space:pre-wrap;justify-content:center}
@@ -28,6 +29,13 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 #fullscreenClose,#modalPlayButton,#modalPrevButton,#modalNextButton,#pauseCloseButton,#pauseStopButton{font-family:'Special Elite',monospace;background:var(--gold);border:0px solid #fff;color:black;cursor:pointer}
 #modalPlayButton,#modalPrevButton,#modalNextButton{width:70px;height:70px;border-radius:50%;font-size:32px;display:flex;align-items:center;justify-content:center}
 #fullscreenClose{position:absolute;top:20px;right:20px;padding:5px 10px;border-radius:5px;font-size:24px}
+
+/* Recording Buttons inside Modal */
+#recordControls{display:flex;justify-content:center;gap:15px;margin-top:40px;flex-wrap:wrap;border-top:1px solid #444;padding-top:25px;width:100%}
+#recordControls button{width:200px;height:45px;border-radius:5px;background:var(--gold);color:black;font-size:14px;font-weight:bold}
+#recordControls button:disabled{background:#444;color:#888;cursor:not-allowed}
+#recordPlayback{display:none}
+
 #shadowingPause{background:rgba(0,0,0,.95);z-index:9998}
 #pauseControls{position:absolute;top:20px;right:20px;display:flex;gap:10px}
 #pauseCloseButton,#pauseStopButton{width:120px;padding:5px 10px;border-radius:5px;font-size:14px}
@@ -37,7 +45,15 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 #pauseLine{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;text-align:center;display:flex;flex-wrap:wrap;justify-content:center}
 #pauseLine .completed{font-size:60px;color:white!important;margin-right:20px;margin-bottom:10px;display:inline-block}
 #pauseTimer{position:absolute;bottom:15%;width:100%;text-align:center;font-size:100px;color:var(--gold)}
-@media(max-width:480px){#fullscreenModal .karaoke-line{font-size:34px}#modalPlayButton,#modalPrevButton,#modalNextButton{width:65px;height:65px;font-size:30px}#pauseLine .completed{font-size:36px}#pauseTimer{font-size:60px;bottom:10%}#playAllButton,#playESButton,#playENButton,#resetAllButton,#stopAllButton{width:45%;font-size:14px}}
+
+@media(max-width:480px){
+  #fullscreenModal .karaoke-line{font-size:34px}
+  #modalPlayButton,#modalPrevButton,#modalNextButton{width:65px;height:65px;font-size:30px}
+  #pauseLine .completed{font-size:36px}
+  #pauseTimer{font-size:60px;bottom:10%}
+  #playAllButton,#playESButton,#playENButton,#resetAllButton,#stopAllButton{width:45%;font-size:14px}
+  #recordControls button{width:100%}
+}
 </style>
 </head>
 <body>
@@ -70,23 +86,45 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
     <button id="modalNextButton">▶</button>
     <audio id="fullscreenAudio"></audio>
   </div>
+  
+  <div id="recordControls">
+    <button id="startRecording">GRABAR / RECORD</button>
+    <button id="stopRecording" disabled>DETENER / STOP</button>
+    <button id="playRecording" disabled>REPRODUCIR / PLAY REC</button>
+    <audio id="recordPlayback"></audio>
+  </div>
 </div>
 
 <script>
-/* minimal, refactored JS preserving original behavior */
 const BASE_URL='https://raw.githubusercontent.com/xpanol/PLAYERS/main/';
 const TRACK_COUNT=30;
 const playersContainer=document.getElementById('players');
 const sequenceAudio=new Audio();
 let playerControls=[],activeSequenceList=[],isPlayingAll=false,currentTrackIndex=0,currentAudioPlaying=null,highlightRaf=null,pauseTimeout=null,countdownInterval=null,activePlayButton=null;
 
-const el={shadowingPause:document.getElementById('shadowingPause'),pauseTimer:document.getElementById('pauseTimer'),
-pauseLine:document.getElementById('pauseLine'),pauseCloseButton:document.getElementById('pauseCloseButton'),
-pauseStopButton:document.getElementById('pauseStopButton'),modal:document.getElementById('fullscreenModal'),
-modalContent:document.getElementById('fullscreenContent'),modalAudio:document.getElementById('fullscreenAudio'),
-modalPlayButton:document.getElementById('modalPlayButton'),modalPrevButton:document.getElementById('modalPrevButton'),
-modalNextButton:document.getElementById('modalNextButton'),modalClose:document.getElementById('fullscreenClose'),
-stopAllButton:document.getElementById('stopAllButton')};
+/* MediaRecorder Variables */
+let mediaRecorder;
+let audioChunks = [];
+const startBtn = document.getElementById('startRecording');
+const stopBtn = document.getElementById('stopRecording');
+const playBtn = document.getElementById('playRecording');
+const playback = document.getElementById('recordPlayback');
+
+const el={
+  shadowingPause:document.getElementById('shadowingPause'),
+  pauseTimer:document.getElementById('pauseTimer'),
+  pauseLine:document.getElementById('pauseLine'),
+  pauseCloseButton:document.getElementById('pauseCloseButton'),
+  pauseStopButton:document.getElementById('pauseStopButton'),
+  modal:document.getElementById('fullscreenModal'),
+  modalContent:document.getElementById('fullscreenContent'),
+  modalAudio:document.getElementById('fullscreenAudio'),
+  modalPlayButton:document.getElementById('modalPlayButton'),
+  modalPrevButton:document.getElementById('modalPrevButton'),
+  modalNextButton:document.getElementById('modalNextButton'),
+  modalClose:document.getElementById('fullscreenClose'),
+  stopAllButton:document.getElementById('stopAllButton')
+};
 
 function stopHighlight(){ if(highlightRaf){ cancelAnimationFrame(highlightRaf); highlightRaf=null } }
 function clearSpanStyles(s){ s.classList.remove('completed'); s.removeAttribute('style') }
@@ -100,15 +138,13 @@ function startHighlightForAudio(audio, spans){
   function loop(){
     if(!running) return;
     const t = audio.currentTime || 0;
-    // immediate per-word behavior: highlight only during [start,end], white outside
     for(const span of spans){
       const s = parseFloat(span.dataset.start) || 0;
       const e = parseFloat(span.dataset.end) || 0;
-      span.classList.remove('completed'); // ensure not brown while playing
+      span.classList.remove('completed');
       if(t >= s && t <= e){
         span.style.color = (span.dataset.type==='z') ? 'rgb(240,50,70)' : 'var(--gold)';
       } else {
-        // immediately return to white after end or before start
         span.style.color = 'white';
       }
     }
@@ -116,7 +152,6 @@ function startHighlightForAudio(audio, spans){
       running=false;
       stopHighlight();
       for(const sp of spans){ sp.classList.add('completed'); sp.removeAttribute('style') }
-      // ensure UI play state handled where used
       return;
     }
     highlightRaf = requestAnimationFrame(loop);
@@ -124,7 +159,6 @@ function startHighlightForAudio(audio, spans){
   highlightRaf = requestAnimationFrame(loop);
 }
 
-/* load lists */
 const order=[],orderES=[],orderEN=[];
 for(let i=1;i<=TRACK_COUNT;i++){
   const num=String(i).padStart(3,'0');
@@ -134,7 +168,6 @@ for(let i=1;i<=TRACK_COUNT;i++){
 }
 activeSequenceList = order;
 
-/* loader creates player DOM and control objects */
 async function loadKaraoke(audioFile,jsonFile,container,type){
   try{
     const res = await fetch(jsonFile);
@@ -168,122 +201,44 @@ async function loadKaraoke(audioFile,jsonFile,container,type){
     localAudio.onplay = ()=>{ if(isPlayingAll) return; startHighlightForAudio(localAudio,wordsArray); currentAudioPlaying=localAudio; playBtn.textContent='❚❚' }
     localAudio.onpause = ()=>{ if(isPlayingAll) return; stopHighlight(); playBtn.textContent='▶' }
     localAudio.onended = ()=>{ if(isPlayingAll) return; playBtn.textContent='▶'; wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }) }
-    playBtn.onclick = ()=>{
-      if(isPlayingAll) stopSequenceGlobally();
-      stopCurrentAudio();
-      const index = order.findIndex(o=>o.audio===audioFile);
-      currentTrackIndex=index;
-      showModalAndPlay(index);
-    };
-    playerControls.push({playBtn,localAudio,wordsArray,src:audioFile,lineStart:wordsArray.length?parseFloat(wordsArray[0].dataset.start):0,lineEnd:wordsArray.length?parseFloat(wordsArray[wordsArray.length-1].dataset.end):0,lineType:type});
+    
+    playerControls.push({playBtn,localAudio,wordsArray,src:audioFile});
   }catch(e){ console.error(e) }
 }
 
-/* bulk load */
-async function loadAll(){ for(const item of order) await loadKaraoke(item.audio,item.json,playersContainer,item.type) }
+async function loadAll(){ 
+  for(const item of order) await loadKaraoke(item.audio,item.json,playersContainer,item.type);
+  // Re-wire clicks after load
+  playerControls.forEach((control,index)=>{
+    control.playBtn.onclick=()=>{
+      stopShadowingPause(); if(isPlayingAll) stopSequenceGlobally(); stopCurrentAudio(); currentTrackIndex=index; showModalAndPlay(index)
+    };
+  });
+}
 loadAll();
 
-/* audio control helpers */
 function stopCurrentAudio(){
   if(currentAudioPlaying){ currentAudioPlaying.pause(); playerControls.forEach(pc=>pc.playBtn.textContent='▶'); currentAudioPlaying=null; stopHighlight() }
   sequenceAudio.pause();
 }
 function resetAllHighlights(){ playerControls.forEach(pc=>{ pc.wordsArray.forEach(clearSpanStyles); pc.playBtn.textContent='▶' }) }
 
-/* pause modal logic */
-function startShadowingPause(duration, wordsArray, overallIndex){
-  if(overallIndex>=0 && overallIndex<playerControls.length) playerControls[overallIndex].playBtn.textContent='▶';
-  el.pauseLine.innerHTML='';
-  wordsArray.forEach(sp=>{ const c=sp.cloneNode(true); c.classList.add('completed'); c.removeAttribute('style'); c.textContent=c.textContent.trim(); el.pauseLine.appendChild(c) });
-  const pauseSec = duration*1.1; let remaining=Math.ceil(pauseSec);
-  el.shadowingPause.style.display='block'; el.shadowingPause.setAttribute('aria-hidden','false'); el.pauseTimer.textContent=remaining;
-  clearInterval(countdownInterval); countdownInterval=setInterval(()=>{ remaining--; if(remaining>=0) el.pauseTimer.textContent=remaining; else clearInterval(countdownInterval) },1000);
-  clearTimeout(pauseTimeout); pauseTimeout=setTimeout(()=>{ stopShadowingPause(); if(isPlayingAll){ const completedData = playerControls[overallIndex]; completedData.wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }); currentTrackIndex++; playNextTrackSequence() } }, pauseSec*1000);
-}
-function stopShadowingPause(){ clearTimeout(pauseTimeout); clearInterval(countdownInterval); el.shadowingPause.style.display='none'; el.shadowingPause.setAttribute('aria-hidden','true'); el.pauseLine.innerHTML='' }
-
-/* sequence playback */
-function playNextTrackSequence(){
-  stopShadowingPause();
-  if(!isPlayingAll){ if(el.stopAllButton.textContent!=='▶ RESUME') el.stopAllButton.hidden=true; return }
-  el.stopAllButton.hidden=false;
-  const currentTrackData = activeSequenceList[currentTrackIndex];
-  if(currentTrackIndex>=0 && currentTrackIndex<activeSequenceList.length){
-    if(sequenceAudio.src !== currentTrackData.audio){ sequenceAudio.src = currentTrackData.audio; sequenceAudio.currentTime=0 }
-    const overallIndex = order.findIndex(o=>o.audio===currentTrackData.audio);
-    const trackData = playerControls[overallIndex];
-    scrollToCurrentTrack(overallIndex);
-    playerControls.forEach((pc,i)=>{ if(i!==overallIndex) pc.playBtn.textContent='▶' });
-    sequenceAudio.onplay = ()=>{ trackData.playBtn.textContent='❚❚'; startHighlightForAudio(sequenceAudio,trackData.wordsArray); currentAudioPlaying=sequenceAudio }
-    sequenceAudio.onpause = ()=> stopHighlight();
-    sequenceAudio.onended = ()=>{
-      trackData.playBtn.textContent='▶';
-      if(sequenceAudio.duration && isFinite(sequenceAudio.duration)) startShadowingPause(sequenceAudio.duration, trackData.wordsArray, overallIndex);
-      else { trackData.wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }); currentTrackIndex++; playNextTrackSequence() }
-    };
-    const p = sequenceAudio.play();
-    if(p !== undefined) p.catch(err=>{ console.error('play error',err); stopSequenceGlobally(); trackData.playBtn.textContent='▶' });
-  } else {
-    isPlayingAll=false;
-    document.getElementById('playAllButton').textContent='▶ PLAY ALL';
-    document.getElementById('playESButton').textContent='🇪🇸 PLAY SPANISH';
-    document.getElementById('playENButton').textContent='🇺🇸 PLAY ENGLISH';
-    el.stopAllButton.hidden=true;
-    currentTrackIndex=0; activePlayButton=null;
-  }
+function resetRecordingUI() {
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    playback.src = '';
+    playBtn.disabled = true;
+    stopBtn.disabled = true;
+    startBtn.disabled = false;
+    startBtn.innerText = "GRABAR / RECORD";
 }
 
-/* start/pause/resume logic */
-function stopSequenceGlobally(){
-  stopShadowingPause(); stopCurrentAudio(); isPlayingAll=false;
-  document.getElementById('playAllButton').textContent='▶ PLAY ALL';
-  document.getElementById('playESButton').textContent='🇪🇸 PLAY SPANISH';
-  document.getElementById('playENButton').textContent='🇺🇸 PLAY ENGLISH';
-  el.stopAllButton.textContent='▶ RESUME'; el.stopAllButton.style.background='var(--gold)'; el.stopAllButton.style.color='black'; el.stopAllButton.hidden=false;
-}
-function resumeFromStopButton(){
-  if(!activePlayButton || currentTrackIndex>=activeSequenceList.length){ el.stopAllButton.hidden=true; return }
-  isPlayingAll=true;
-  document.getElementById('playAllButton').textContent='▶ PLAY ALL';
-  document.getElementById('playESButton').textContent='🇪🇸 PLAY SPANISH';
-  document.getElementById('playENButton').textContent='🇺🇸 PLAY ENGLISH';
-  activePlayButton.textContent='❚❚ PAUSE';
-  el.stopAllButton.textContent='🛑 STOP ALL'; el.stopAllButton.style.background='#ff0000'; el.stopAllButton.style.color='white';
-  playNextTrackSequence();
-}
-el.stopAllButton.onclick = ()=>{ if(el.stopAllButton.textContent==='🛑 STOP ALL') stopSequenceGlobally(); else if(el.stopAllButton.textContent==='▶ RESUME') resumeFromStopButton() }
-
-function startFilteredPlay(list, buttonElement){
-  stopShadowingPause(); stopCurrentAudio();
-  if(el.stopAllButton.textContent==='▶ RESUME'){ if(activePlayButton===buttonElement){ resumeFromStopButton(); return } activePlayButton=null }
-  const listChanged = activeSequenceList !== list;
-  const isListCompleted = currentTrackIndex >= activeSequenceList.length;
-  if(listChanged){ activeSequenceList = list; currentTrackIndex = 0; resetAllHighlights() } else if(isListCompleted){ currentTrackIndex = 0; resetAllHighlights() }
-  if(isPlayingAll && activePlayButton===buttonElement){ stopSequenceGlobally(); return }
-  isPlayingAll=true; activeSequenceList=list; activePlayButton=buttonElement;
-  document.getElementById('playAllButton').textContent='▶ PLAY ALL';
-  document.getElementById('playESButton').textContent='🇪🇸 PLAY SPANISH';
-  document.getElementById('playENButton').textContent='🇺🇸 PLAY ENGLISH';
-  buttonElement.textContent='❚❚ PAUSE';
-  el.stopAllButton.textContent='🛑 STOP ALL'; el.stopAllButton.style.background='#ff0000'; el.stopAllButton.style.color='white'; el.stopAllButton.hidden=false;
-  const currentTrackData = activeSequenceList[currentTrackIndex];
-  const isResumable = sequenceAudio.src && sequenceAudio.currentTime>0 && !sequenceAudio.ended && currentTrackIndex<activeSequenceList.length && currentTrackData.audio===sequenceAudio.src;
-  if(isResumable){ const overallIndex = order.findIndex(o=>o.audio===currentTrackData.audio); scrollToCurrentTrack(overallIndex); const p=sequenceAudio.play(); if(p!==undefined) p.catch(e=>{ console.error(e); stopSequenceGlobally() }) }
-  else playNextTrackSequence();
-}
-
-/* buttons */
-document.getElementById('playAllButton').onclick = ()=> startFilteredPlay(order, document.getElementById('playAllButton'));
-document.getElementById('playESButton').onclick = ()=> startFilteredPlay(orderES, document.getElementById('playESButton'));
-document.getElementById('playENButton').onclick = ()=> startFilteredPlay(orderEN, document.getElementById('playENButton'));
-document.getElementById('resetAllButton').onclick = ()=> location.reload();
-
-/* modal display */
 function showModalAndPlay(index){
   stopShadowingPause(); if(isPlayingAll) stopSequenceGlobally(); stopCurrentAudio();
   currentTrackIndex = index; const item = order[index];
   scrollToCurrentTrack(currentTrackIndex);
   el.modal.style.display='flex'; el.modal.setAttribute('aria-hidden','false'); el.modalContent.innerHTML='';
+  resetRecordingUI();
+
   const clone = document.createElement('div'); clone.className='karaoke-line';
   fetch(item.json).then(r=>r.json()).then(data=>{
     const spans=[];
@@ -295,72 +250,103 @@ function showModalAndPlay(index){
       })
     });
     el.modalContent.appendChild(clone);
-    el.modalAudio.pause(); el.modalAudio.src=item.audio; el.modalAudio.currentTime=0; el.modalAudio.load();
+    el.modalAudio.src=item.audio; el.modalAudio.currentTime=0; el.modalAudio.load();
     el.modalAudio.onplay = ()=>{ el.modalPlayButton.textContent='❚❚'; startHighlightForAudio(el.modalAudio,spans); currentAudioPlaying=el.modalAudio }
     el.modalAudio.onpause = ()=>{ el.modalPlayButton.textContent='▶'; stopHighlight() }
     el.modalAudio.onended = ()=>{ el.modalPlayButton.textContent='▶'; spans.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }) }
-    el.modalPrevButton.onclick = ()=>{ if(currentTrackIndex>0){ currentTrackIndex--; showModalAndPlay(currentTrackIndex); el.modalPlayButton.textContent='▶' } }
-    el.modalNextButton.onclick = ()=>{ if(currentTrackIndex<order.length-1){ currentTrackIndex++; showModalAndPlay(currentTrackIndex); el.modalPlayButton.textContent='▶' } }
-    el.modalPlayButton.onclick = ()=>{ if(el.modalAudio.paused || el.modalAudio.ended){ if(el.modalAudio.ended) el.modalAudio.currentTime=0; spans.forEach(s=>{ s.classList.remove('completed'); s.removeAttribute('style') }); el.modalAudio.play() } else el.modalAudio.pause() }
+    el.modalAudio.play();
+    
+    el.modalPrevButton.onclick = ()=>{ if(currentTrackIndex>0){ currentTrackIndex--; showModalAndPlay(currentTrackIndex) } }
+    el.modalNextButton.onclick = ()=>{ if(currentTrackIndex<order.length-1){ currentTrackIndex++; showModalAndPlay(currentTrackIndex) } }
+    el.modalPlayButton.onclick = ()=>{ if(el.modalAudio.paused || el.modalAudio.ended) el.modalAudio.play(); else el.modalAudio.pause() }
   });
 }
 
-/* wire player clicks after they load into playerControls */
-const waitForPlayers = setInterval(()=>{
-  if(playerControls.length){
-    clearInterval(waitForPlayers);
-    playerControls.forEach((control,index)=>control.playBtn.onclick=()=>{
-      stopShadowingPause(); if(isPlayingAll) stopSequenceGlobally(); stopCurrentAudio(); currentTrackIndex=index; showModalAndPlay(index)
-    });
-  }
-},200);
-
-/* modal close */
-el.modalClose.onclick = ()=>{
-  el.modalAudio.pause(); stopHighlight(); el.modal.style.display='none'; el.modal.setAttribute('aria-hidden','true');
-  if(currentTrackIndex>=0 && currentTrackIndex<order.length){
-    const currentData = playerControls[currentTrackIndex];
-    if(currentData && el.modalAudio.currentTime >= parseFloat(currentData.wordsArray[currentData.wordsArray.length-1].dataset.end)){
-      currentData.wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') })
-    }
-    scrollToCurrentTrack(currentTrackIndex);
-  }
+/* RECORDING LOGIC */
+startBtn.onclick = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        playback.src = URL.createObjectURL(blob);
+        playBtn.disabled = false;
+    };
+    mediaRecorder.start();
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    startBtn.innerText = "GRABANDO... / RECORDING...";
 };
 
-/* pause controls */
-el.pauseCloseButton.onclick = ()=>{
-  if(isPlayingAll){
-    const currentDataActiveList = activeSequenceList[currentTrackIndex];
-    const overallIndex = order.findIndex(o=>o.audio===currentDataActiveList.audio);
-    if(overallIndex!==-1){ const currentData = playerControls[overallIndex]; currentData.wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }); currentData.playBtn.textContent='▶' }
-    currentTrackIndex++; playNextTrackSequence();
-  } else { stopShadowingPause(); sequenceAudio.pause(); stopHighlight() }
+stopBtn.onclick = () => {
+    mediaRecorder.stop();
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    startBtn.innerText = "RE-GRABAR / RE-RECORD";
 };
-el.pauseStopButton.onclick = ()=>{
-  if(isPlayingAll){
-    const currentDataActiveList = activeSequenceList[currentTrackIndex];
-    const overallIndex = order.findIndex(o=>o.audio===currentDataActiveList.audio);
-    if(overallIndex!==-1){ const currentData = playerControls[overallIndex]; currentData.wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }); currentData.playBtn.textContent='▶' }
-  }
+
+playBtn.onclick = () => playback.play();
+
+/* Original Global Controls Restored */
+document.getElementById('playAllButton').onclick = ()=> startFilteredPlay(order, document.getElementById('playAllButton'));
+document.getElementById('playESButton').onclick = ()=> startFilteredPlay(orderES, document.getElementById('playESButton'));
+document.getElementById('playENButton').onclick = ()=> startFilteredPlay(orderEN, document.getElementById('playENButton'));
+document.getElementById('resetAllButton').onclick = ()=> location.reload();
+
+function stopSequenceGlobally(){
   stopShadowingPause(); stopCurrentAudio(); isPlayingAll=false;
   document.getElementById('playAllButton').textContent='▶ PLAY ALL';
   document.getElementById('playESButton').textContent='🇪🇸 PLAY SPANISH';
   document.getElementById('playENButton').textContent='🇺🇸 PLAY ENGLISH';
-  currentTrackIndex=0; activePlayButton=null; el.stopAllButton.hidden=true; el.stopAllButton.textContent='🛑 STOP ALL';
-};
+  el.stopAllButton.textContent='▶ RESUME'; el.stopAllButton.style.background='var(--gold)'; el.stopAllButton.style.color='black'; el.stopAllButton.hidden=false;
+}
 
-/* init */
-el.stopAllButton.hidden=true;
-  document.addEventListener('keydown', function(e){
-  if(e.key === 'Escape'){
-    if(el.modal.style.display === 'flex'){
-      el.modalClose.click();
-    }
-    if(el.shadowingPause.style.display === 'block'){
-      el.pauseStopButton.click();
-    }
+function startFilteredPlay(list, buttonElement){
+  stopShadowingPause(); stopCurrentAudio();
+  if(el.stopAllButton.textContent==='▶ RESUME' && activePlayButton===buttonElement){ resumeFromStopButton(); return }
+  activeSequenceList = list; currentTrackIndex = 0; resetAllHighlights();
+  isPlayingAll=true; activePlayButton=buttonElement;
+  buttonElement.textContent='❚❚ PAUSE';
+  el.stopAllButton.textContent='🛑 STOP ALL'; el.stopAllButton.style.background='#ff0000'; el.stopAllButton.style.color='white'; el.stopAllButton.hidden=false;
+  playNextTrackSequence();
+}
+
+function playNextTrackSequence(){
+  stopShadowingPause();
+  if(!isPlayingAll) return;
+  const currentTrackData = activeSequenceList[currentTrackIndex];
+  if(currentTrackIndex < activeSequenceList.length){
+    sequenceAudio.src = currentTrackData.audio;
+    const overallIndex = order.findIndex(o=>o.audio===currentTrackData.audio);
+    const trackData = playerControls[overallIndex];
+    scrollToCurrentTrack(overallIndex);
+    sequenceAudio.onplay = ()=>{ trackData.playBtn.textContent='❚❚'; startHighlightForAudio(sequenceAudio,trackData.wordsArray); currentAudioPlaying=sequenceAudio }
+    sequenceAudio.onended = ()=>{
+      trackData.playBtn.textContent='▶';
+      startShadowingPause(sequenceAudio.duration, trackData.wordsArray, overallIndex);
+    };
+    sequenceAudio.play();
+  } else {
+    stopSequenceGlobally();
+    el.stopAllButton.hidden=true;
   }
-});
+}
+
+function startShadowingPause(duration, wordsArray, overallIndex){
+  el.pauseLine.innerHTML='';
+  wordsArray.forEach(sp=>{ const c=sp.cloneNode(true); c.classList.add('completed'); c.removeAttribute('style'); c.textContent=c.textContent.trim(); el.pauseLine.appendChild(c) });
+  let remaining=Math.ceil(duration*1.1);
+  el.shadowingPause.style.display='flex'; el.pauseTimer.textContent=remaining;
+  countdownInterval=setInterval(()=>{ remaining--; el.pauseTimer.textContent=remaining; if(remaining<=0) clearInterval(countdownInterval) },1000);
+  pauseTimeout=setTimeout(()=>{ stopShadowingPause(); currentTrackIndex++; playNextTrackSequence() }, (duration*1.1)*1000);
+}
+
+function stopShadowingPause(){ clearTimeout(pauseTimeout); clearInterval(countdownInterval); el.shadowingPause.style.display='none' }
+
+el.modalClose.onclick = ()=>{ el.modalAudio.pause(); resetRecordingUI(); el.modal.style.display='none' };
+el.pauseStopButton.onclick = ()=> stopSequenceGlobally();
+el.pauseCloseButton.onclick = ()=>{ stopShadowingPause(); currentTrackIndex++; playNextTrackSequence() };
 
 </script>
 </body>
