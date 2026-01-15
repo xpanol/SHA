@@ -30,7 +30,6 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 #modalPlayButton,#modalPrevButton,#modalNextButton{width:70px;height:70px;border-radius:50%;font-size:32px;display:flex;align-items:center;justify-content:center}
 #fullscreenClose{position:absolute;top:20px;right:20px;padding:5px 10px;border-radius:5px;font-size:24px}
 
-/* Recording Buttons inside Modal */
 #recordControls{display:flex;justify-content:center;gap:15px;margin-top:40px;flex-wrap:wrap;border-top:1px solid #444;padding-top:25px;width:100%}
 #recordControls button{width:200px;height:45px;border-radius:5px;background:var(--gold);color:black;font-size:14px;font-weight:bold}
 #recordControls button:disabled{background:#444;color:#888;cursor:not-allowed}
@@ -41,11 +40,15 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
 #pauseCloseButton,#pauseStopButton{width:120px;padding:5px 10px;border-radius:5px;font-size:14px}
 #pauseCloseButton{background:var(--gold);color:black}
 #pauseStopButton{background:#ff0000;color:white}
-#shadowingHeader{position:absolute;top:15%;width:100%;text-align:center;color:var(--gold);font-size:100px;line-height:1;font-weight:700}
+
+/* Desktop Font Size */
+#shadowingHeader{position:absolute;top:15%;width:100%;text-align:center;color:var(--gold);font-size:50px;line-height:1;font-weight:700}
+
 #pauseLine{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;text-align:center;display:flex;flex-wrap:wrap;justify-content:center}
 #pauseLine .completed{font-size:60px;color:white!important;margin-right:20px;margin-bottom:10px;display:inline-block}
 #pauseTimer{position:absolute;bottom:15%;width:100%;text-align:center;font-size:100px;color:var(--gold)}
 
+/* RESPONSIVE FIXES */
 @media(max-width:480px){
   #fullscreenModal .karaoke-line{font-size:34px}
   #modalPlayButton,#modalPrevButton,#modalNextButton{width:65px;height:65px;font-size:30px}
@@ -53,6 +56,14 @@ button{font-family:'Special Elite',monospace;border:0px solid #fff;cursor:pointe
   #pauseTimer{font-size:60px;bottom:10%}
   #playAllButton,#playESButton,#playENButton,#resetAllButton,#stopAllButton{width:45%;font-size:14px}
   #recordControls button{width:100%}
+  #shadowingHeader{font-size:30px; top:10%}
+}
+
+/* MOBILE LANDSCAPE SPECIFIC: Font size reduced by 60% (from 50px to 20px) */
+@media(max-width:930px) and (orientation: landscape) {
+  #shadowingHeader { font-size: 20px; top: 5%; }
+  #pauseLine .completed { font-size: 28px; }
+  #pauseTimer { font-size: 40px; bottom: 5%; }
 }
 </style>
 </head>
@@ -102,7 +113,6 @@ const playersContainer=document.getElementById('players');
 const sequenceAudio=new Audio();
 let playerControls=[],activeSequenceList=[],isPlayingAll=false,currentTrackIndex=0,currentAudioPlaying=null,highlightRaf=null,pauseTimeout=null,countdownInterval=null,activePlayButton=null;
 
-/* MediaRecorder Variables */
 let mediaRecorder;
 let audioChunks = [];
 const startBtn = document.getElementById('startRecording');
@@ -201,14 +211,12 @@ async function loadKaraoke(audioFile,jsonFile,container,type){
     localAudio.onplay = ()=>{ if(isPlayingAll) return; startHighlightForAudio(localAudio,wordsArray); currentAudioPlaying=localAudio; playBtn.textContent='❚❚' }
     localAudio.onpause = ()=>{ if(isPlayingAll) return; stopHighlight(); playBtn.textContent='▶' }
     localAudio.onended = ()=>{ if(isPlayingAll) return; playBtn.textContent='▶'; wordsArray.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }) }
-    
     playerControls.push({playBtn,localAudio,wordsArray,src:audioFile});
   }catch(e){ console.error(e) }
 }
 
 async function loadAll(){ 
   for(const item of order) await loadKaraoke(item.audio,item.json,playersContainer,item.type);
-  // Re-wire clicks after load
   playerControls.forEach((control,index)=>{
     control.playBtn.onclick=()=>{
       stopShadowingPause(); if(isPlayingAll) stopSequenceGlobally(); stopCurrentAudio(); currentTrackIndex=index; showModalAndPlay(index)
@@ -238,7 +246,6 @@ function showModalAndPlay(index){
   scrollToCurrentTrack(currentTrackIndex);
   el.modal.style.display='flex'; el.modal.setAttribute('aria-hidden','false'); el.modalContent.innerHTML='';
   resetRecordingUI();
-
   const clone = document.createElement('div'); clone.className='karaoke-line';
   fetch(item.json).then(r=>r.json()).then(data=>{
     const spans=[];
@@ -255,14 +262,12 @@ function showModalAndPlay(index){
     el.modalAudio.onpause = ()=>{ el.modalPlayButton.textContent='▶'; stopHighlight() }
     el.modalAudio.onended = ()=>{ el.modalPlayButton.textContent='▶'; spans.forEach(s=>{ s.classList.add('completed'); s.removeAttribute('style') }) }
     el.modalAudio.play();
-    
     el.modalPrevButton.onclick = ()=>{ if(currentTrackIndex>0){ currentTrackIndex--; showModalAndPlay(currentTrackIndex) } }
     el.modalNextButton.onclick = ()=>{ if(currentTrackIndex<order.length-1){ currentTrackIndex++; showModalAndPlay(currentTrackIndex) } }
     el.modalPlayButton.onclick = ()=>{ if(el.modalAudio.paused || el.modalAudio.ended) el.modalAudio.play(); else el.modalAudio.pause() }
   });
 }
 
-/* RECORDING LOGIC */
 startBtn.onclick = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
@@ -278,17 +283,9 @@ startBtn.onclick = async () => {
     stopBtn.disabled = false;
     startBtn.innerText = "GRABANDO... / RECORDING...";
 };
-
-stopBtn.onclick = () => {
-    mediaRecorder.stop();
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    startBtn.innerText = "RE-GRABAR / RE-RECORD";
-};
-
+stopBtn.onclick = () => { mediaRecorder.stop(); startBtn.disabled = false; stopBtn.disabled = true; startBtn.innerText = "RE-GRABAR / RE-RECORD"; };
 playBtn.onclick = () => playback.play();
 
-/* Original Global Controls Restored */
 document.getElementById('playAllButton').onclick = ()=> startFilteredPlay(order, document.getElementById('playAllButton'));
 document.getElementById('playESButton').onclick = ()=> startFilteredPlay(orderES, document.getElementById('playESButton'));
 document.getElementById('playENButton').onclick = ()=> startFilteredPlay(orderEN, document.getElementById('playENButton'));
@@ -322,15 +319,9 @@ function playNextTrackSequence(){
     const trackData = playerControls[overallIndex];
     scrollToCurrentTrack(overallIndex);
     sequenceAudio.onplay = ()=>{ trackData.playBtn.textContent='❚❚'; startHighlightForAudio(sequenceAudio,trackData.wordsArray); currentAudioPlaying=sequenceAudio }
-    sequenceAudio.onended = ()=>{
-      trackData.playBtn.textContent='▶';
-      startShadowingPause(sequenceAudio.duration, trackData.wordsArray, overallIndex);
-    };
+    sequenceAudio.onended = ()=>{ trackData.playBtn.textContent='▶'; startShadowingPause(sequenceAudio.duration, trackData.wordsArray, overallIndex); };
     sequenceAudio.play();
-  } else {
-    stopSequenceGlobally();
-    el.stopAllButton.hidden=true;
-  }
+  } else { stopSequenceGlobally(); el.stopAllButton.hidden=true; }
 }
 
 function startShadowingPause(duration, wordsArray, overallIndex){
@@ -347,7 +338,6 @@ function stopShadowingPause(){ clearTimeout(pauseTimeout); clearInterval(countdo
 el.modalClose.onclick = ()=>{ el.modalAudio.pause(); resetRecordingUI(); el.modal.style.display='none' };
 el.pauseStopButton.onclick = ()=> stopSequenceGlobally();
 el.pauseCloseButton.onclick = ()=>{ stopShadowingPause(); currentTrackIndex++; playNextTrackSequence() };
-
 </script>
 </body>
 </html>
